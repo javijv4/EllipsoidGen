@@ -23,6 +23,5 @@ height2 = 53
 theta_max = np.pi/2*1.3
 
 mesh = gen_ellipsoid_mesh(radius1, radius2, height1, height2, theta_max, ndiv_t, ndiv_r, order)
-print(mesh)
 
-io.write('check.vtu', mesh)
+io.write('ellipsoid.vtu', mesh)

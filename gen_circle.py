@@ -87,7 +87,6 @@ mesh = io.Mesh(mesh.points, {'quad9': mesh.cells_dict['quad9']})
 ien = mesh.cells[0].data
 arr = np.array([0,3,2,1,7,6,5,4,8])
 ien[0:(ndiv-1)*(ndiv-1)] = ien[0:(ndiv-1)*(ndiv-1), arr] 
-print(ien,ndiv*ndiv)
 
-io.write('check.vtu', mesh)
+io.write('circle.vtu', mesh)
 
