@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import meshio as io
 import pygmsh
+from scipy.spatial import KDTree
 
 def gen_circle(ndiv, ndiv_r, side=0.6,  r = 1.0, order=2):
     assert (order == 1) or (order == 2)
@@ -86,8 +87,38 @@ def gen_circle(ndiv, ndiv_r, side=0.6,  r = 1.0, order=2):
     elif order == 2:
         ien = mesh.cells_dict['quad9']
         arr = np.array([0,3,2,1,7,6,5,4,8])
-        ien[0:(ndiv-1)*(ndiv-1)] = ien[0:(ndiv-1)*(ndiv-1), arr] 
+        ien[0:(ndiv-1)*(ndiv-1)] = ien[0:(ndiv-1)*(ndiv-1), arr]
         mesh = io.Mesh(mesh.points, {'quad9': ien})
+
+    #%%
+    xyz = mesh.points
+    cnodes = np.unique(ien[(ndiv-1)*(ndiv-1):])
+
+    if order == 1:
+        ncirc = ndiv*4-4
+    elif order == 2:
+        ncirc = (ndiv*2-1)*4-4
+
+    angles = np.linspace(np.pi, -np.pi, ncirc+1, endpoint=True)[:-1]
+
+    node_angles = np.arctan2(xyz[cnodes,1], xyz[cnodes,0])
+    node_angles[np.isclose(node_angles, -np.pi)] = np.pi
+
+    for i in range(len(angles)):
+        theta = angles[i]
+        nodes = cnodes[np.isclose(node_angles, theta, atol=1e-1)]
+        x, y = xyz[nodes,0:2].T
+
+        radius = np.sqrt(x**2+y**2)
+        sort = np.argsort(radius)
+        nodes = nodes[sort]
+
+        min_r = np.min(radius)
+        max_r = r
+
+        radius = np.linspace(min_r, max_r, len(nodes), endpoint=1)
+        xyz[nodes[1:],0] = radius[1:]*np.cos(theta)
+        xyz[nodes[1:],1] = radius[1:]*np.sin(theta)
 
     return mesh
 
@@ -112,6 +143,31 @@ def warp_to_ellipsoid(circle_mesh, a, b, c, theta_max=None, zmax=None):
     mesh = io.Mesh(xyz, {cells.type: cells.data})
 
     return mesh
+
+
+def get_surface_mesh(mesh):
+    ien = mesh.cells[0].data
+
+    if ien.shape[1] == 8:   # Assuming hex
+        raise 'Not implemented'
+
+    elif ien.shape[1] == 27:   # Assuming hex27
+        array = np.array([[0,1,5,4,8,17,12,16,22],
+                          [1,2,6,5,9,18,13,17,21],
+                          [2,3,7,6,10,19,14,18,23],
+                          [3,0,4,7,11,16,15,19,20],
+                          [0,1,2,3,8,9,10,11,24],
+                          [4,5,6,7,12,13,14,15,25]])
+        nelems = np.repeat(np.arange(ien.shape[0]),6)
+        faces = np.vstack(ien[:,array])
+        sort_faces = np.sort(faces,axis=1)
+
+        f, i, c = np.unique(sort_faces, axis=0, return_counts=True, return_index=True)
+        ind = i[np.where(c==1)[0]]
+        bfaces = faces[ind]
+        belem = nelems[ind]
+
+    return belem, bfaces
 
 
 def build_hexahedral_mesh(ellipsoid_mesh1, ellipsoid_mesh2, ndiv_t, order=1):
@@ -157,8 +213,8 @@ def build_hexahedral_mesh(ellipsoid_mesh1, ellipsoid_mesh2, ndiv_t, order=1):
             ien2 = ien_quad + len(xyz) + xyz_nodes
 
             xyz = np.vstack([xyz, xyz1, xyz2])
-            ien_hex = np.hstack([ien0[:,:4], ien2[:,:4], ien0[:,4:8], ien2[:,4:8], 
-                            ien1[:,0:4], ien1[:,[7,5,4,6]], 
+            ien_hex = np.hstack([ien0[:,:4], ien2[:,:4], ien0[:,4:8], ien2[:,4:8],
+                            ien1[:,0:4], ien1[:,[7,5,4,6]],
                             ien0[:,-1,None], ien2[:,-1,None], ien1[:,-1,None]])
             ien.append(ien_hex)
             ien0 = ien2
@@ -166,23 +222,55 @@ def build_hexahedral_mesh(ellipsoid_mesh1, ellipsoid_mesh2, ndiv_t, order=1):
 
 
         # Adding epi
-        ien2 = ien_quad + len(xyz)
+        nodes_minus_epi = len(xyz)
+        ien2 = ien_quad + nodes_minus_epi
         xyz2 = xyz_epi
         xyz1 = (xyz2 - xyz0)*0.5 + xyz0
 
         ien1 = ien_quad + len(xyz)
         ien2 = ien_quad + len(xyz) + xyz_nodes
-        ien_hex = np.hstack([ien0[:,:4], ien2[:,:4], ien0[:,4:8], ien2[:,4:8], 
-                        ien1[:,0:4], ien1[:,[7,5,4,6]], 
+        ien_hex = np.hstack([ien0[:,:4], ien2[:,:4], ien0[:,4:8], ien2[:,4:8],
+                        ien1[:,0:4], ien1[:,[7,5,4,6]],
                         ien0[:,-1,None], ien2[:,-1,None], ien1[:,-1,None]])
 
         xyz = np.vstack([xyz, xyz1, xyz2])
         ien.append(ien_hex)
-        ien = np.vstack(ien)                       
+        ien = np.vstack(ien)
 
         mesh = io.Mesh(xyz, {'hexahedron27': ien})
-        
-    return mesh
+
+        bdata = get_boundary_data(mesh, ellipsoid_mesh1, ellipsoid_mesh2, order)
+
+
+    return mesh, bdata
+
+def get_boundary_data(mesh, ellipsoid_mesh1, ellipsoid_mesh2, order):   
+
+    if order == 1:
+        raise 'Not implemented'
+    elif order == 2: 
+        xyz = mesh.points    
+        belems, bfaces = get_surface_mesh(mesh)
+        midpoints = np.mean(xyz[bfaces], axis=1)
+
+        xyz_elems1 = ellipsoid_mesh1.points[ellipsoid_mesh1.cells[0].data]
+        xyz_elems2 = ellipsoid_mesh2.points[ellipsoid_mesh2.cells[0].data]
+
+        midpoints1 = np.mean(xyz_elems1, axis=1)
+        midpoints2 = np.mean(xyz_elems2, axis=1)
+
+        tree = KDTree(midpoints)
+        _, corr1 = tree.query(midpoints1)
+        _, corr2 = tree.query(midpoints2)
+
+        labels = np.zeros(len(bfaces), dtype=int) + 3
+        labels[corr1] = 1
+        labels[corr2] = 2
+
+        bdata = np.vstack([belems, bfaces.T, labels]).T
+
+    return bdata
+
 
 
 def gen_ellipsoid_mesh(radius1, radius2, height1, height2, theta_max, ndiv_t, ndiv_r, order):
@@ -199,6 +287,6 @@ def gen_ellipsoid_mesh(radius1, radius2, height1, height2, theta_max, ndiv_t, nd
     circle_mesh2 = gen_circle(ndiv, ndiv_r, order=order, side=0.4)
     ellipsoid_mesh2 = warp_to_ellipsoid(circle_mesh2, a2, b2, c2, zmax=np.min(ellipsoid_mesh1.points[:,2]))
 
-    mesh = build_hexahedral_mesh(ellipsoid_mesh1, ellipsoid_mesh2, ndiv_t, order=order)
+    mesh, bdata = build_hexahedral_mesh(ellipsoid_mesh1, ellipsoid_mesh2, ndiv_t, order=order)
 
-    return mesh
+    return mesh, bdata

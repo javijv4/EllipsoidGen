@@ -15,6 +15,7 @@ r = 1.0
 side = 0.6
 ndiv = 3
 ndiv_r = 3
+order=2
 with pygmsh.geo.Geometry() as geom:
     lcar = 0.1
     p0 = geom.add_point([0.0, 0.0], lcar)
@@ -80,13 +81,47 @@ with pygmsh.geo.Geometry() as geom:
     geom.set_transfinite_surface(circ4, "Left", [p4,p1,p5,p8])
     geom.set_recombined_surfaces([rect, circ1, circ2, circ3, circ4])
 
-    mesh = geom.generate_mesh(order=2)
+    mesh = geom.generate_mesh(order=order)
 
 mesh = io.Mesh(mesh.points, {'quad9': mesh.cells_dict['quad9']})
 
 ien = mesh.cells[0].data
 arr = np.array([0,3,2,1,7,6,5,4,8])
-ien[0:(ndiv-1)*(ndiv-1)] = ien[0:(ndiv-1)*(ndiv-1), arr] 
+ien[0:(ndiv-1)*(ndiv-1)] = ien[0:(ndiv-1)*(ndiv-1), arr]
 
+#%%
+xyz = mesh.points
+rnodes = np.unique(ien[0:(ndiv-1)*(ndiv-1)])
+cnodes = np.unique(ien[(ndiv-1)*(ndiv-1):])
+# cnodes = np.setdiff1d(cnodes, div_nodes)
+
+if order == 1:
+    ncirc = ndiv*4-4
+elif order == 2:
+    ncirc = (ndiv*2-1)*4-4
+
+angles = np.linspace(np.pi, -np.pi, ncirc+1, endpoint=True)[:-1]
+
+node_angles = np.arctan2(xyz[cnodes,1], xyz[cnodes,0])
+node_angles[np.isclose(node_angles, -np.pi)] = np.pi
+
+for i in range(len(angles)):
+    theta = angles[i]
+    nodes = cnodes[np.isclose(node_angles, theta, atol=1e-1)]
+    print(nodes)
+    x, y = xyz[nodes,0:2].T
+
+    radius = np.sqrt(x**2+y**2)
+    sort = np.argsort(radius)
+    nodes = nodes[sort]
+
+    min_r = np.min(radius)
+    max_r = r
+
+    radius = np.linspace(min_r, max_r, len(nodes), endpoint=1)
+    xyz[nodes[1:],0] = radius[1:]*np.cos(theta)
+    xyz[nodes[1:],1] = radius[1:]*np.sin(theta)
+
+mesh.points = xyz
 io.write('circle.vtu', mesh)
 
