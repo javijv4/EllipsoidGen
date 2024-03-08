@@ -82,15 +82,32 @@ def gen_circle(ndiv, ndiv_r, side=0.6,  r = 1.0, order=2):
 
         mesh = geom.generate_mesh(order=order)
 
+
+    mesh = fix_orientation(mesh, order, ndiv)
+    mesh = fix_circular_mesh(mesh, order, ndiv, r)
+
+    return mesh
+
+
+def fix_orientation(mesh, order, ndiv):
     if order == 1:
         mesh = io.Mesh(mesh.points, {'quad': mesh.cells_dict['quad']})
+        ien = mesh.cells_dict['quad']
+        arr = np.array([0,3,2,1])
+        ien[0:(ndiv-1)*(ndiv-1)] = ien[0:(ndiv-1)*(ndiv-1), arr]
+        mesh = io.Mesh(mesh.points, {'quad': ien})
     elif order == 2:
         ien = mesh.cells_dict['quad9']
         arr = np.array([0,3,2,1,7,6,5,4,8])
         ien[0:(ndiv-1)*(ndiv-1)] = ien[0:(ndiv-1)*(ndiv-1), arr]
         mesh = io.Mesh(mesh.points, {'quad9': ien})
 
-    #%%
+    return mesh
+
+
+def fix_circular_mesh(mesh, order, ndiv, r):
+    ien = mesh.cells[0].data
+
     xyz = mesh.points
     cnodes = np.unique(ien[(ndiv-1)*(ndiv-1):])
 
@@ -101,12 +118,15 @@ def gen_circle(ndiv, ndiv_r, side=0.6,  r = 1.0, order=2):
 
     angles = np.linspace(np.pi, -np.pi, ncirc+1, endpoint=True)[:-1]
 
-    node_angles = np.arctan2(xyz[cnodes,1], xyz[cnodes,0])
+    node_angles = np.arctan2(xyz[:,1], xyz[:,0])
     node_angles[np.isclose(node_angles, -np.pi)] = np.pi
+
+    sort = np.argsort(node_angles[cnodes])[::-1]
+    cnodes = cnodes[sort].reshape([-1, len(cnodes)//len(angles)])
 
     for i in range(len(angles)):
         theta = angles[i]
-        nodes = cnodes[np.isclose(node_angles, theta, atol=1e-1)]
+        nodes = cnodes[i]
         x, y = xyz[nodes,0:2].T
 
         radius = np.sqrt(x**2+y**2)
@@ -120,6 +140,7 @@ def gen_circle(ndiv, ndiv_r, side=0.6,  r = 1.0, order=2):
         xyz[nodes[1:],0] = radius[1:]*np.cos(theta)
         xyz[nodes[1:],1] = radius[1:]*np.sin(theta)
 
+    mesh.points = xyz
     return mesh
 
 
@@ -149,7 +170,20 @@ def get_surface_mesh(mesh):
     ien = mesh.cells[0].data
 
     if ien.shape[1] == 8:   # Assuming hex
-        raise 'Not implemented'
+        array = np.array([[0,1,5,4],
+                          [1,2,6,5],
+                          [2,3,7,6],
+                          [3,0,4,7],
+                          [0,1,2,3],
+                          [4,5,6,7]])
+        nelems = np.repeat(np.arange(ien.shape[0]),6)
+        faces = np.vstack(ien[:,array])
+        sort_faces = np.sort(faces,axis=1)
+
+        f, i, c = np.unique(sort_faces, axis=0, return_counts=True, return_index=True)
+        ind = i[np.where(c==1)[0]]
+        bfaces = faces[ind]
+        belem = nelems[ind]
 
     elif ien.shape[1] == 27:   # Assuming hex27
         array = np.array([[0,1,5,4,8,17,12,16,22],
@@ -239,35 +273,38 @@ def build_hexahedral_mesh(ellipsoid_mesh1, ellipsoid_mesh2, ndiv_t, order=1):
 
         mesh = io.Mesh(xyz, {'hexahedron27': ien})
 
-        bdata = get_boundary_data(mesh, ellipsoid_mesh1, ellipsoid_mesh2, order)
+    bdata = get_boundary_data(mesh, ellipsoid_mesh1, ellipsoid_mesh2, order)
 
 
     return mesh, bdata
 
-def get_boundary_data(mesh, ellipsoid_mesh1, ellipsoid_mesh2, order):   
+def get_boundary_data(mesh, ellipsoid_mesh1, ellipsoid_mesh2, order):
 
     if order == 1:
-        raise 'Not implemented'
-    elif order == 2: 
-        xyz = mesh.points    
+        xyz = mesh.points
         belems, bfaces = get_surface_mesh(mesh)
-        midpoints = np.mean(xyz[bfaces], axis=1)
 
-        xyz_elems1 = ellipsoid_mesh1.points[ellipsoid_mesh1.cells[0].data]
-        xyz_elems2 = ellipsoid_mesh2.points[ellipsoid_mesh2.cells[0].data]
+    elif order == 2:
+        xyz = mesh.points
+        belems, bfaces = get_surface_mesh(mesh)
 
-        midpoints1 = np.mean(xyz_elems1, axis=1)
-        midpoints2 = np.mean(xyz_elems2, axis=1)
+    midpoints = np.mean(xyz[bfaces], axis=1)
 
-        tree = KDTree(midpoints)
-        _, corr1 = tree.query(midpoints1)
-        _, corr2 = tree.query(midpoints2)
+    xyz_elems1 = ellipsoid_mesh1.points[ellipsoid_mesh1.cells[0].data]
+    xyz_elems2 = ellipsoid_mesh2.points[ellipsoid_mesh2.cells[0].data]
 
-        labels = np.zeros(len(bfaces), dtype=int) + 3
-        labels[corr1] = 1
-        labels[corr2] = 2
+    midpoints1 = np.mean(xyz_elems1, axis=1)
+    midpoints2 = np.mean(xyz_elems2, axis=1)
 
-        bdata = np.vstack([belems, bfaces.T, labels]).T
+    tree = KDTree(midpoints)
+    _, corr1 = tree.query(midpoints1)
+    _, corr2 = tree.query(midpoints2)
+
+    labels = np.zeros(len(bfaces), dtype=int) + 3
+    labels[corr1] = 1
+    labels[corr2] = 2
+
+    bdata = np.vstack([belems, bfaces.T, labels]).T
 
     return bdata
 

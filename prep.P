@@ -1,0 +1,11 @@
+% ----  Basis Functions  -----------------------------------------------------------------
+!UseBasis={LinBasis|HEXAHEDRAL_ELEMENT|NODAL_LAGRANGE1|GAUSS_LEGENDRE9}
+!UseBasis={QuadBasis|HEXAHEDRAL_ELEMENT|NODAL_LAGRANGE2|GAUSS_LEGENDRE9}
+
+% ----  Topologies  ----------------------------------------------------------------------
+!DefTopology={TP1|out/ellipsoid|LinBasis}
+!DefTopology={TP2|out/ellipsoid_quad|QuadBasis}
+!DefInterface={OneToOne|TP1|TP2}
+
+% ----  Variables  -----------------------------------------------------------------------
+!DefVariablePointer={Space|TP1|mesh/ellipsoid|3}

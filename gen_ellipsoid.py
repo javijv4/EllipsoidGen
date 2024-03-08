@@ -13,7 +13,7 @@ from EllipsoidGen import gen_ellipsoid_mesh
 import cheartio as chio
 
 
-ndiv_r = 10
+ndiv_r = 20
 ndiv_t = 6
 order = 2
 
@@ -25,7 +25,7 @@ theta_max = np.pi/2*1.3
 
 mesh, bdata = gen_ellipsoid_mesh(radius1, radius2, height1, height2, theta_max, ndiv_t, ndiv_r, order)
 
-chio.write_mesh('out/ellipsoid', mesh.points, mesh.cells[0].data)
-chio.write_bfile('out/ellipsoid', bdata)
+chio.write_mesh('mesh3/ellipsoid', mesh.points, mesh.cells[0].data)
+chio.write_bfile('mesh3/ellipsoid', bdata)
 
-io.write('ellipsoid.vtu', mesh)
+io.write('mesh3/ellipsoid.vtu', mesh)
