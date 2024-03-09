@@ -44,6 +44,7 @@ with pygmsh.geo.Geometry() as geom:
     c3 = geom.add_circle_arc(p7, p0, p8)
     c4 = geom.add_circle_arc(p8, p0, p5)
 
+    geom.remove(p0)
 
     geom.set_transfinite_curve(l1, ndiv, "Progression", 1.0)
     geom.set_transfinite_curve(l2, ndiv, "Progression", 1.0)
@@ -83,7 +84,15 @@ with pygmsh.geo.Geometry() as geom:
 
     mesh = geom.generate_mesh(order=order)
 
+
 mesh = io.Mesh(mesh.points, {'quad9': mesh.cells_dict['quad9']})
+
+mesh.points = mesh.points[1:]
+mesh.cells[0].data = mesh.cells[0].data - 1
+
+arr1 = np.unique(mesh.cells[0].data)
+arr2 = np.arange(len(mesh.points))
+print(list(np.setdiff1d(arr2, arr1)))
 
 ien = mesh.cells[0].data
 arr = np.array([0,3,2,1,7,6,5,4,8])
@@ -108,7 +117,6 @@ node_angles[np.isclose(node_angles, -np.pi)] = np.pi
 for i in range(len(angles)):
     theta = angles[i]
     nodes = cnodes[np.isclose(node_angles, theta, atol=1e-1)]
-    print(nodes)
     x, y = xyz[nodes,0:2].T
 
     radius = np.sqrt(x**2+y**2)
@@ -123,5 +131,7 @@ for i in range(len(angles)):
     xyz[nodes[1:],1] = radius[1:]*np.sin(theta)
 
 mesh.points = xyz
+
+
 io.write('circle.vtu', mesh)
 

@@ -86,6 +86,10 @@ def gen_circle(ndiv, ndiv_r, side=0.6,  r = 1.0, order=2):
     mesh = fix_orientation(mesh, order, ndiv)
     mesh = fix_circular_mesh(mesh, order, ndiv, r)
 
+    # Need to get rid of node 0 (does not belong to any element)
+    mesh.points = mesh.points[1:]
+    mesh.cells[0].data = mesh.cells[0].data - 1
+
     return mesh
 
 
