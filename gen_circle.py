@@ -11,11 +11,81 @@ import matplotlib.pyplot as plt
 import pygmsh
 import meshio as io
 
+
+def fix_orientation(mesh, order, ndiv):
+    if order == 1:
+        ien = mesh.cells_dict['quad']
+        arr = np.array([0,3,2,1])
+        ien[0:(ndiv-1)*(ndiv-1)] = ien[0:(ndiv-1)*(ndiv-1), arr]
+        mesh = io.Mesh(mesh.points, {'quad': ien})
+    elif order == 2:
+        ien = mesh.cells_dict['quad9']
+        arr = np.array([0,3,2,1,7,6,5,4,8])
+        ien[0:(ndiv-1)*(ndiv-1)] = ien[0:(ndiv-1)*(ndiv-1), arr]
+        mesh = io.Mesh(mesh.points, {'quad9': ien})
+
+    return mesh
+
+
+def fix_circular_mesh(mesh, order, ndiv, r):
+    ien = mesh.cells[0].data
+
+    xyz = mesh.points
+    cnodes = np.unique(ien[(ndiv-1)*(ndiv-1):])
+
+    if order == 1:
+        ncirc = ndiv*4-4
+    elif order == 2:
+        ncirc = (ndiv*2-1)*4-4
+
+    angles = np.linspace(np.pi, -np.pi, ncirc+1, endpoint=True)[:-1]
+
+    node_angles = np.arctan2(xyz[:,1], xyz[:,0])
+    node_angles[np.isclose(node_angles, -np.pi)] = np.pi
+
+    sort = np.argsort(node_angles[cnodes])[::-1]
+    cnodes = cnodes[sort].reshape([-1, len(cnodes)//len(angles)])
+
+    xs = np.concatenate([np.full(ncirc//8,-side/2),
+                         np.linspace(-side/2, side/2, ncirc//4+1, endpoint=True)[:-1],
+                         np.full(ncirc//4,side/2),
+                         np.linspace(side/2, -side/2, ncirc//4+1, endpoint=True)[:-1],
+                         np.full(ncirc//8,-side/2)])
+    ys = np.concatenate([np.linspace(0, side/2, ncirc//8+1, endpoint=True)[:-1],
+                         np.full(ncirc//4,side/2),
+                         np.linspace(side/2, -side/2, ncirc//4+1, endpoint=True)[:-1],
+                         np.full(ncirc//4,-side/2),
+                         np.linspace(-side/2, 0, ncirc//8+1, endpoint=True)[:-1]])
+    angles_s = np.arctan2(ys, xs)
+
+    for i in range(len(angles)):
+        theta = angles[i]
+        theta_s = angles_s[i]
+        nodes = cnodes[i]
+        x, y = xyz[nodes,0:2].T
+
+        radius = np.sqrt(x**2+y**2)
+        sort = np.argsort(radius)
+        nodes = nodes[sort]
+
+        min_r = np.min(radius)
+        max_r = r
+
+        alpha = np.linspace(0,1,len(nodes), endpoint=True)
+
+        radius = np.linspace(min_r, max_r, len(nodes), endpoint=1)
+        xyz[nodes[:],0] = radius[:]*(np.cos(theta)*alpha + np.cos(theta_s)*(1-alpha))
+        xyz[nodes[:],1] = radius[:]*(np.sin(theta)*alpha + np.sin(theta_s)*(1-alpha))
+
+    mesh.points = xyz
+    return mesh
+
 r = 1.0
 side = 0.6
-ndiv = 3
+ndiv = 5
 ndiv_r = 3
 order=2
+
 with pygmsh.geo.Geometry() as geom:
     lcar = 0.1
     p0 = geom.add_point([0.0, 0.0], lcar)
@@ -44,7 +114,6 @@ with pygmsh.geo.Geometry() as geom:
     c3 = geom.add_circle_arc(p7, p0, p8)
     c4 = geom.add_circle_arc(p8, p0, p5)
 
-    geom.remove(p0)
 
     geom.set_transfinite_curve(l1, ndiv, "Progression", 1.0)
     geom.set_transfinite_curve(l2, ndiv, "Progression", 1.0)
@@ -84,53 +153,20 @@ with pygmsh.geo.Geometry() as geom:
 
     mesh = geom.generate_mesh(order=order)
 
+if order == 1:
+    mesh = io.Mesh(mesh.points, {'quad': mesh.cells_dict['quad']})
+elif order == 2:
+    mesh = io.Mesh(mesh.points, {'quad9': mesh.cells_dict['quad9']})
 
-mesh = io.Mesh(mesh.points, {'quad9': mesh.cells_dict['quad9']})
 
+
+
+# Need to get rid of node 0 (does not belong to any element)
 mesh.points = mesh.points[1:]
 mesh.cells[0].data = mesh.cells[0].data - 1
 
-arr1 = np.unique(mesh.cells[0].data)
-arr2 = np.arange(len(mesh.points))
-print(list(np.setdiff1d(arr2, arr1)))
-
-ien = mesh.cells[0].data
-arr = np.array([0,3,2,1,7,6,5,4,8])
-ien[0:(ndiv-1)*(ndiv-1)] = ien[0:(ndiv-1)*(ndiv-1), arr]
-
-#%%
-xyz = mesh.points
-rnodes = np.unique(ien[0:(ndiv-1)*(ndiv-1)])
-cnodes = np.unique(ien[(ndiv-1)*(ndiv-1):])
-# cnodes = np.setdiff1d(cnodes, div_nodes)
-
-if order == 1:
-    ncirc = ndiv*4-4
-elif order == 2:
-    ncirc = (ndiv*2-1)*4-4
-
-angles = np.linspace(np.pi, -np.pi, ncirc+1, endpoint=True)[:-1]
-
-node_angles = np.arctan2(xyz[cnodes,1], xyz[cnodes,0])
-node_angles[np.isclose(node_angles, -np.pi)] = np.pi
-
-for i in range(len(angles)):
-    theta = angles[i]
-    nodes = cnodes[np.isclose(node_angles, theta, atol=1e-1)]
-    x, y = xyz[nodes,0:2].T
-
-    radius = np.sqrt(x**2+y**2)
-    sort = np.argsort(radius)
-    nodes = nodes[sort]
-
-    min_r = np.min(radius)
-    max_r = r
-
-    radius = np.linspace(min_r, max_r, len(nodes), endpoint=1)
-    xyz[nodes[1:],0] = radius[1:]*np.cos(theta)
-    xyz[nodes[1:],1] = radius[1:]*np.sin(theta)
-
-mesh.points = xyz
+mesh = fix_orientation(mesh, order, ndiv)
+mesh = fix_circular_mesh(mesh, order, ndiv, r)
 
 
 io.write('circle.vtu', mesh)

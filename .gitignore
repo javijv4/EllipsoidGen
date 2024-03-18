@@ -1,4 +1,5 @@
 *.vtu
 *.png
+*__pycache__*
 out/
 mesh*/

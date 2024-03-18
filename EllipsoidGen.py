@@ -82,20 +82,23 @@ def gen_circle(ndiv, ndiv_r, side=0.6,  r = 1.0, order=2):
 
         mesh = geom.generate_mesh(order=order)
 
-
-    mesh = fix_orientation(mesh, order, ndiv)
-    mesh = fix_circular_mesh(mesh, order, ndiv, r)
+    if order == 1:
+        mesh = io.Mesh(mesh.points, {'quad': mesh.cells_dict['quad']})
+    elif order == 2:
+        mesh = io.Mesh(mesh.points, {'quad9': mesh.cells_dict['quad9']})
 
     # Need to get rid of node 0 (does not belong to any element)
     mesh.points = mesh.points[1:]
     mesh.cells[0].data = mesh.cells[0].data - 1
+
+    mesh = fix_orientation(mesh, order, ndiv)
+    mesh = fix_circular_mesh(mesh, order, ndiv, side, r)
 
     return mesh
 
 
 def fix_orientation(mesh, order, ndiv):
     if order == 1:
-        mesh = io.Mesh(mesh.points, {'quad': mesh.cells_dict['quad']})
         ien = mesh.cells_dict['quad']
         arr = np.array([0,3,2,1])
         ien[0:(ndiv-1)*(ndiv-1)] = ien[0:(ndiv-1)*(ndiv-1), arr]
@@ -109,7 +112,8 @@ def fix_orientation(mesh, order, ndiv):
     return mesh
 
 
-def fix_circular_mesh(mesh, order, ndiv, r):
+
+def fix_circular_mesh(mesh, order, ndiv, side, r):
     ien = mesh.cells[0].data
 
     xyz = mesh.points
@@ -128,8 +132,21 @@ def fix_circular_mesh(mesh, order, ndiv, r):
     sort = np.argsort(node_angles[cnodes])[::-1]
     cnodes = cnodes[sort].reshape([-1, len(cnodes)//len(angles)])
 
+    xs = np.concatenate([np.full(ncirc//8,-side/2),
+                         np.linspace(-side/2, side/2, ncirc//4+1, endpoint=True)[:-1],
+                         np.full(ncirc//4,side/2),
+                         np.linspace(side/2, -side/2, ncirc//4+1, endpoint=True)[:-1],
+                         np.full(ncirc//8,-side/2)])
+    ys = np.concatenate([np.linspace(0, side/2, ncirc//8+1, endpoint=True)[:-1],
+                         np.full(ncirc//4,side/2),
+                         np.linspace(side/2, -side/2, ncirc//4+1, endpoint=True)[:-1],
+                         np.full(ncirc//4,-side/2),
+                         np.linspace(-side/2, 0, ncirc//8+1, endpoint=True)[:-1]])
+    angles_s = np.arctan2(ys, xs)
+
     for i in range(len(angles)):
         theta = angles[i]
+        theta_s = angles_s[i]
         nodes = cnodes[i]
         x, y = xyz[nodes,0:2].T
 
@@ -140,9 +157,11 @@ def fix_circular_mesh(mesh, order, ndiv, r):
         min_r = np.min(radius)
         max_r = r
 
+        alpha = np.linspace(0,1,len(nodes), endpoint=True)
+
         radius = np.linspace(min_r, max_r, len(nodes), endpoint=1)
-        xyz[nodes[1:],0] = radius[1:]*np.cos(theta)
-        xyz[nodes[1:],1] = radius[1:]*np.sin(theta)
+        xyz[nodes[:],0] = radius[:]*(np.cos(theta)*alpha + np.cos(theta_s)*(1-alpha))
+        xyz[nodes[:],1] = radius[:]*(np.sin(theta)*alpha + np.sin(theta_s)*(1-alpha))
 
     mesh.points = xyz
     return mesh
@@ -327,6 +346,7 @@ def gen_ellipsoid_mesh(radius1, radius2, height1, height2, theta_max, ndiv_t, nd
 
     circle_mesh2 = gen_circle(ndiv, ndiv_r, order=order, side=0.4)
     ellipsoid_mesh2 = warp_to_ellipsoid(circle_mesh2, a2, b2, c2, zmax=np.min(ellipsoid_mesh1.points[:,2]))
+    io.write('check.vtu', circle_mesh2)
 
     mesh, bdata = build_hexahedral_mesh(ellipsoid_mesh1, ellipsoid_mesh2, ndiv_t, order=order)
 
