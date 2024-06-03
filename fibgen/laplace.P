@@ -1,0 +1,32 @@
+!include={boundaries.P}
+
+!SetOutputPath={#meshdir}
+% --- Solver Definition ----------------------------------------------
+!DefSolverGroup={LAPLACE|null|Matrix}
+!DefSolverSubGroup={LAPLACE|SOLVER_SEQUENTIAL|Matrix}
+
+!DefSolverMatrix={Matrix|SOLVER_MUMPS|fib}
+
+% --- Basis function definition --------------------------------------
+!UseBasis={LinBasis|HEXAHEDRAL_ELEMENT|NODAL_LAGRANGE1|GAUSS_LEGENDRE4}
+!UseBasis={QuadBasis|HEXAHEDRAL_ELEMENT|NODAL_LAGRANGE2|GAUSS_LEGENDRE4}
+
+% --- Topology -------------------------------------------------------
+!DefTopology={TP2 | #meshdir/ellipsoid_quad | QuadBasis}
+
+% --- Variables ------------------------------------------------------
+!DefVariablePointer={Space| TP2 | #meshdir/ellipsoid_quad | 3}
+!DefVariablePointer={Trans | TP2 | 1}
+
+% --- Other ------------------------------------------------------------
+!SetExportFrequency={Space|-1}
+
+%  ---  Problem Definition  --------------------------------------------
+!DefProblem={fib|LAPLACE_PROBLEM}
+  !UseVariablePointer={Space|Space}
+  !UseVariablePointer={Variable|Trans}
+
+  !Boundary-patch-definitions
+      #epi     Trans  DIRICHLET    1              % Epi
+      #endo    Trans  DIRICHLET    0              % Endo
+

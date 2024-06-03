@@ -1,0 +1,43 @@
+
+!include={boundaries.P}
+
+!SetOutputPath={#meshdir}
+% --- Solver Definition ----------------------------------------------
+!DefSolverGroup={LAPLACE|null|Matrix|MatrixGrad}
+!DefSolverSubGroup={LAPLACE|SOLVER_SEQUENTIAL|Matrix|MatrixGrad}
+
+!DefSolverMatrix={Matrix|SOLVER_MUMPS|fib}
+!DefSolverMatrix={MatrixGrad|SOLVER_MUMPS|GradProj}
+
+% --- Basis function definition --------------------------------------
+!UseBasis={LinBasis|HEXAHEDRAL_ELEMENT|NODAL_LAGRANGE1|GAUSS_LEGENDRE6}
+!UseBasis={QuadBasis|HEXAHEDRAL_ELEMENT|NODAL_LAGRANGE2|GAUSS_LEGENDRE6}
+
+% --- Topology -------------------------------------------------------
+!DefTopology={TP1 | #meshdir/ellipsoid | LinBasis}
+!DefTopology={TP2 | #meshdir/ellipsoid_quad | QuadBasis}
+
+!DefInterface={OneToOne | TP1 | TP2}
+% --- Variables ------------------------------------------------------
+!DefVariablePointer={Space| TP2 | #meshdir/ellipsoid_quad | 3}
+!DefVariablePointer={Long | TP2 | 1}
+!DefVariablePointer={GradLong | TP1 | 3}
+
+% --- Other ------------------------------------------------------------
+!SetExportFrequency={Space|-1}
+
+%  ---  Problem Definition  --------------------------------------------
+!DefProblem={fib|LAPLACE_PROBLEM}
+  !UseVariablePointer={Space|Space}
+  !UseVariablePointer={Variable|Long}
+
+  !Boundary-patch-definitions
+      specific  Long  specific     #meshdir/apex
+      #base     Long  DIRICHLET    1              % Base
+
+!DefProblem={GradProj|l2varprojection_problem}
+  !UseVariablePointer={Space|Space}
+  !UseVariablePointer={RHS|Long}
+  !UseVariablePointer={Variable|GradLong}
+  !Projected-Variable={gradient}
+  !Boundary-conditions-not-required

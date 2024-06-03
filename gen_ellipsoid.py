@@ -14,11 +14,11 @@ from EllipsoidGen import gen_ellipsoid_mesh
 import cheartio as chio
 
 
-out_path = 'mesh2'
+out_path = 'mesh_fine2'
 if not os.path.exists(out_path): os.mkdir(out_path)
 
-ndiv_r = 14
-ndiv_t = 6
+ndiv_r = 23
+ndiv_t = 4
 order = 2
 
 radius1 = 20
@@ -28,11 +28,12 @@ height2 = 53
 theta_max = np.pi/2*1.3
 
 mesh, bdata = gen_ellipsoid_mesh(radius1, radius2, height1, height2, theta_max, ndiv_t, ndiv_r, order)
+print(mesh.cells[0].data.shape)
 
 chio.write_mesh(out_path + '/ellipsoid_quad', mesh.points, mesh.cells[0].data)
 chio.write_bfile(out_path + '/ellipsoid_quad', bdata)
+chio.bfile_to_vtu(out_path + '/ellipsoid_quad', out_path + '/ellipsoid_quad_b.vtu')
 
 apex_id = np.where(np.isclose(mesh.points[:,0],0)*np.isclose(mesh.points[:,1],0))[0]
 chio.write_specific(out_path + '/apex', np.array([apex_id]), np.zeros(len(apex_id)))
-print(list(apex_id))
 io.write(out_path + '/ellipsoid_quad.vtu', mesh)

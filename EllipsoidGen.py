@@ -346,7 +346,6 @@ def gen_ellipsoid_mesh(radius1, radius2, height1, height2, theta_max, ndiv_t, nd
 
     circle_mesh2 = gen_circle(ndiv, ndiv_r, order=order, side=0.4)
     ellipsoid_mesh2 = warp_to_ellipsoid(circle_mesh2, a2, b2, c2, zmax=np.min(ellipsoid_mesh1.points[:,2]))
-    io.write('check.vtu', circle_mesh2)
 
     mesh, bdata = build_hexahedral_mesh(ellipsoid_mesh1, ellipsoid_mesh2, ndiv_t, order=order)
 
